@@ -129,7 +129,6 @@ from ansible.module_utils.f5_utils import (
     iControlUnexpectedHTTPError
 )
 from f5.utils.iapp_parser import (
-    IappParser,
     NonextantTemplateNameException
 )
 
@@ -180,7 +179,7 @@ class Parameters(AnsibleF5Parameters):
                 name = self._get_template_name()
                 return name
             except NonextantTemplateNameException:
-                return F5ModuleError(
+                raise F5ModuleError(
                     "No template name was found in the template"
                 )
         return None
@@ -247,9 +246,18 @@ class Parameters(AnsibleF5Parameters):
         return re.sub(pattern, replace, template)
 
     def _get_template_name(self):
-        parser = IappParser(self.content)
-        tmpl = parser.parse_template()
-        return tmpl['name']
+        # There is a bug in the iApp parser in the F5 SDK that prevents us from
+        # using it in all cases to get the name of an iApp. So we'll use this
+        # pattern for now and file a bug with the F5 SDK
+        pattern = r'sys\s+application\s+template\s+(?P<path>\/\w+\/)?(?P<name>[\w.]+)'
+        matches = re.search(pattern, self.content)
+        try:
+            result = matches.group('name')
+        except IndexError:
+            result = None
+        if result:
+            return result
+        raise NonextantTemplateNameException
 
 
 class ModuleManager(object):
